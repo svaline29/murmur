@@ -36,7 +36,13 @@ export function useSimulation(): {
   useEffect(() => {
     agentsRef.current = initAgents(AGENT_COUNT, CANVAS_WIDTH, CANVAS_HEIGHT);
     rulesRef.current = { ...DEFAULT_RULES };
-    prevSnapshotRef.current = null;
+    const snap = extractSnapshot(
+      agentsRef.current,
+      rulesRef.current,
+      null,
+    );
+    prevSnapshotRef.current = snap;
+    setSnapshot(snap);
     lastExtractMsRef.current = performance.now();
   }, []);
 

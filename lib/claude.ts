@@ -75,16 +75,6 @@ function compassDirection(radians: number): string {
   return labels[sector];
 }
 
-function weightedMeanClusterVelocity(snapshot: SimSnapshot): number {
-  let sum = 0;
-  let w = 0;
-  for (const c of snapshot.clusters) {
-    sum += c.avgVelocity * c.size;
-    w += c.size;
-  }
-  return w === 0 ? 0 : sum / w;
-}
-
 function varianceDescriptor(variance: number): string {
   if (variance < 0.25) return "low — ordered movement";
   if (variance < 0.75) return "moderate — mixed motion";
@@ -109,9 +99,8 @@ export function serializeSnapshotContext(snapshot: SimSnapshot): string {
       ? "(none)"
       : clustersBySizeDesc.map((c) => `one of size ${c.size}`).join(", ");
 
-  const avgVel = weightedMeanClusterVelocity(snapshot);
   const outliersLine = `- Outliers: ${snapshot.outlierCount} agents not in any cluster`;
-  const varianceLine = `- Average velocity: ${round1(avgVel)} (variance: ${round1(snapshot.velocityVariance)}, ${varianceDescriptor(snapshot.velocityVariance)})`;
+  const varianceLine = `- Average velocity: ${round1(snapshot.averageVelocity)} (variance: ${round1(snapshot.velocityVariance)}, ${varianceDescriptor(snapshot.velocityVariance)})`;
   const headingLine = `- Heading: mostly ${compassDirection(snapshot.dominantDirection)}`;
   const timeSeconds = snapshot.delta.timeSinceLastChange / 1000;
   const timeLine = `- Time since cluster count last changed: ${round1(timeSeconds)} seconds`;
@@ -231,7 +220,7 @@ function validateRuleUpdate(
     }
     out[k] = n;
   }
-  return Object.keys(out).length === 0 ? false : out;
+  return Object.keys(out).length === 0 ? null : out;
 }
 
 export function parseResponse(rawText: string): ClaudeResponse | null {

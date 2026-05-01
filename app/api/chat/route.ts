@@ -13,13 +13,15 @@ const FALLBACK: ClaudeResponse = {
   highlight_cluster: null,
 };
 
+const MAX_HISTORY_MESSAGES = 20;
+
 function jsonResponse(body: ClaudeResponse, status = 200) {
   return Response.json(body, { status });
 }
 
 function isChatHistory(x: unknown): x is ChatMessage[] {
   if (!Array.isArray(x)) return false;
-  return x.slice(-10).every(
+  return x.slice(-MAX_HISTORY_MESSAGES).every(
     (m) =>
       m !== null &&
       typeof m === "object" &&
@@ -52,6 +54,7 @@ function isSimSnapshot(x: unknown): x is SimSnapshot {
     typeof s.agentCount !== "number" ||
     typeof s.clusterCount !== "number" ||
     typeof s.outlierCount !== "number" ||
+    typeof s.averageVelocity !== "number" ||
     typeof s.velocityVariance !== "number" ||
     typeof s.dominantDirection !== "number"
   ) {
@@ -149,7 +152,7 @@ export async function POST(request: Request) {
   }
 
   const hist: ChatMessage[] = isChatHistory(history)
-    ? history.slice(-10)
+    ? history.slice(-MAX_HISTORY_MESSAGES)
     : [];
 
   const apiKey = process.env.ANTHROPIC_API_KEY;

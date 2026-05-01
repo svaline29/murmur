@@ -10,6 +10,7 @@ import { DEFAULT_RULES } from "@/lib/simulation";
 import type { ChatMessage, ClaudeResponse, Cluster, RuleWeights } from "@/lib/types";
 
 const HIGHLIGHT_CLEAR_MS = 8000;
+const MAX_HISTORY_MESSAGES = 20;
 
 export default function Home(): ReactElement {
   const {
@@ -72,7 +73,7 @@ export default function Home(): ReactElement {
     async (userMessage: string) => {
       if (!snapshot) return;
 
-      const historyForApi = chatHistory.slice(-10);
+      const historyForApi = chatHistory.slice(-MAX_HISTORY_MESSAGES);
       const userMsg: ChatMessage = {
         role: "user",
         content: userMessage,

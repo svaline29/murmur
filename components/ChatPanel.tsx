@@ -48,45 +48,45 @@ export function ChatPanel({
     >
       <header className="shrink-0 border-b border-[var(--border-subtle)] px-5 py-4">
         <h1
-          className="text-2xl font-semibold tracking-tight"
+          className="text-2xl font-semibold tracking-[0.025em]"
           style={{ fontFamily: "var(--font-brand-display), system-ui, sans-serif" }}
         >
-          Murmur.
+          Murmur<span className="text-[var(--accent)] opacity-80">.</span>
         </h1>
-        <p className="mt-0.5 text-[11px] font-mono tracking-[0.06em] text-[var(--text-secondary)]">
+        <p className="mt-1 font-mono text-[11px] tracking-[0.08em] text-[var(--text-secondary)]">
           swarm observer
         </p>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 font-sans text-[15px] leading-[1.5]">
-        <div className="flex flex-col gap-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 font-sans text-[15px] leading-[1.5]">
+        <div className="flex flex-col gap-4">
           {history.map((m, i) =>
             m.role === "user" ? (
               <div key={`${m.timestamp}-u-${i}`} className="flex justify-end">
                 <div
-                  className="max-w-[92%] rounded-lg px-3 py-2"
-                  style={{ background: "var(--accent-soft)" }}
+                  className="max-w-[88%] rounded-lg border border-[var(--border-subtle)] px-3 py-2"
+                  style={{ background: "var(--bg-panel)" }}
                 >
                   <p className="text-[var(--text-primary)]">{m.content}</p>
                 </div>
               </div>
             ) : (
               <div key={`${m.timestamp}-a-${i}`} className="flex justify-start">
-                <div className="max-w-[92%] px-1 py-1">
-                  <p className="leading-relaxed text-[var(--text-primary)]">{m.content}</p>
+                <div className="max-w-[94%] px-1 py-2">
+                  <p className="leading-[1.65] text-[var(--text-primary)]">{m.content}</p>
                 </div>
               </div>
             )
           )}
 
           {isPending ? (
-            <div className="flex justify-start px-1">
+            <div className="flex justify-start px-1 py-2">
               <div
-                className="inline-flex items-center gap-2 text-[var(--text-secondary)]"
+                className="inline-flex items-baseline gap-2 text-[var(--text-secondary)]"
                 aria-live="polite"
               >
                 <span className="font-sans text-[15px]">Thinking</span>
-                <span className="inline-flex h-4 items-end gap-0.5 pb-0.5" aria-hidden>
+                <span className="inline-flex h-4 items-end gap-1 pb-0.5" aria-hidden>
                   {[0, 1, 2].map((i) => (
                     <span
                       key={i}
@@ -105,15 +105,15 @@ export function ChatPanel({
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-[var(--border-subtle)] px-3 pb-3 pt-2">
-        <div className="mb-2 flex flex-wrap gap-1.5">
+      <div className="shrink-0 border-t border-[var(--border-subtle)] px-4 pb-4 pt-3">
+        <div className="mb-3 flex flex-wrap gap-2">
           {PRESETS.map((label) => (
             <button
               key={label}
               type="button"
               disabled={isPending}
               onClick={() => onSendMessage(label)}
-              className="rounded border border-[var(--border-subtle)] bg-[var(--bg-panel)] px-2 py-1 text-center text-[11px] leading-snug text-[var(--text-secondary)] font-mono transition-colors hover:border-[var(--accent-glow)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-45"
+              className="rounded border border-[var(--border-subtle)] bg-[var(--bg-panel)] px-2 py-1 font-mono text-[11px] leading-snug text-[var(--text-secondary)] transition-colors duration-200 hover:border-[var(--accent-glow)] hover:bg-[rgba(124,248,255,0.06)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-45"
             >
               {label}
             </button>
@@ -127,7 +127,7 @@ export function ChatPanel({
             onChange={(e) => setDraft(e.target.value)}
             disabled={isPending}
             placeholder="Message the observer…"
-            className="w-full rounded-md border bg-transparent px-3 py-2.5 text-[15px] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
+            className="w-full rounded-md border bg-transparent px-3 py-2 text-[15px] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] outline-none transition-colors duration-200 focus-visible:ring-1 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-55"
             style={{
               borderColor: "var(--border-subtle)",
               ...(isPending
