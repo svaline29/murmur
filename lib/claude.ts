@@ -35,12 +35,16 @@ You MUST always return valid JSON in this exact shape:
   "highlight_cluster": null OR <integer cluster id from the snapshot>
 }
 
-Rule weight ranges:
-- separation: 0 to 2
-- alignment: 0 to 2
-- cohesion: 0 to 2
-- speed: 0.5 to 4
-- perception: 20 to 100
+Rule weight ranges (use the full range — be bold for dramatic effect):
+- separation: 0 to 5
+- alignment: 0 to 5
+- cohesion: 0 to 5
+- speed: 0.2 to 8
+- perception: 10 to 250
+
+When the user asks for chaos, push values toward extremes. When they
+ask for tight flocking, push toward the other extreme. Subtle nudges
+are wrong — the user wants visible change.
 
 Only set rule_update when the user is requesting a behavioral change.
 Only set highlight_cluster when referencing a specific cluster.
