@@ -1,12 +1,8 @@
-import type {
-  Agent,
-  Cluster,
-  PerceptionRules,
-  SimSnapshot,
-} from "./types";
+import type { Agent, Cluster, RuleWeights, SimSnapshot } from "./types";
 
-const DEFAULT_RADIUS_PX = 60;
-const DEFAULT_MIN_CLUSTER_SIZE = 5;
+/** Cluster detection radius default per spec §4.2 (distinct from boids `perception`). */
+const DEFAULT_CLUSTER_RADIUS_PX = 60;
+const MIN_CLUSTER_SIZE = 5;
 
 function distSq(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx;
@@ -14,28 +10,32 @@ function distSq(ax: number, ay: number, bx: number, by: number): number {
   return dx * dx + dy * dy;
 }
 
-/** Smallest signed difference between two headings (wraps at ±π). */
-function circularDiff(a: number, b: number): number {
-  return Math.atan2(Math.sin(a - b), Math.cos(a - b));
+function meanSpeed(agents: Agent[]): number {
+  if (agents.length === 0) return 0;
+  let s = 0;
+  for (const a of agents) {
+    s += Math.hypot(a.vx, a.vy);
+  }
+  return s / agents.length;
 }
 
-function meanSpeedVariance(agents: Agent[]): number {
+/** Population variance of velocity magnitudes. */
+function velocityVarianceMag(agents: Agent[]): number {
   if (agents.length === 0) return 0;
   const speeds = agents.map((a) => Math.hypot(a.vx, a.vy));
-  const mean = speeds.reduce((s, v) => s + v, 0) / speeds.length;
-  const m2 =
-    speeds.reduce((s, v) => s + (v - mean) * (v - mean), 0) / speeds.length;
-  return m2;
+  const mean = speeds.reduce((acc, v) => acc + v, 0) / speeds.length;
+  return speeds.reduce((acc, v) => acc + (v - mean) * (v - mean), 0) / speeds.length;
 }
 
-/** Circular mean direction; returns angle in (−π, π]. Empty set → 0. */
-function circularMeanHeading(agents: Agent[]): number {
+/** Circular mean of velocity headings `atan2(vy, vx)`. */
+function dominantDirectionFromVelocity(agents: Agent[]): number {
   if (agents.length === 0) return 0;
   let sx = 0;
   let sy = 0;
   for (const a of agents) {
-    sx += Math.cos(a.heading);
-    sy += Math.sin(a.heading);
+    const h = Math.atan2(a.vy, a.vx);
+    sx += Math.cos(h);
+    sy += Math.sin(h);
   }
   return Math.atan2(sy, sx);
 }
@@ -70,17 +70,40 @@ class UnionFind {
   }
 }
 
-/**
- * Distance-threshold grouping: edge if dist ≤ radius. Only agents with ≥2
- * neighbors participate. Keeps connected components with size ≥ minClusterSize.
- * Cluster ids are 0…N−1 in order of size descending.
- */
-export function detectClusters(
+function buildClusterFromIndices(
   agents: Agent[],
-  radius: number = DEFAULT_RADIUS_PX,
-): Cluster[] {
+  indices: number[],
+  clusterId: number,
+): Cluster {
+  indices.sort((a, b) => agents[a]!.id - agents[b]!.id);
+  const agentIds = indices.map((i) => agents[i]!.id);
+  let cx = 0;
+  let cy = 0;
+  let speedSum = 0;
+  for (const i of indices) {
+    const a = agents[i]!;
+    cx += a.x;
+    cy += a.y;
+    speedSum += Math.hypot(a.vx, a.vy);
+  }
+  const n = indices.length;
+  return {
+    id: clusterId,
+    centroid: { x: cx / n, y: cy / n },
+    size: n,
+    avgVelocity: speedSum / n,
+    agentIds,
+  };
+}
+
+/**
+ * Distance-threshold grouping (Union-Find). Agents need ≥2 neighbors within
+ * `radius`. Components with size ≥ 5 become clusters; ids 0..N−1 by descending size.
+ */
+export function detectClusters(agents: Agent[], radius: number): Cluster[] {
+  const r = radius;
   const n = agents.length;
-  const r2 = radius * radius;
+  const r2 = r * r;
 
   const neighborCount: number[] = new Array(n).fill(0);
   for (let i = 0; i < n; i++) {
@@ -95,12 +118,8 @@ export function detectClusters(
   }
 
   const eligible: number[] = [];
-  const localIndex = new Map<number, number>();
   for (let i = 0; i < n; i++) {
-    if (neighborCount[i]! >= 2) {
-      localIndex.set(i, eligible.length);
-      eligible.push(i);
-    }
+    if (neighborCount[i]! >= 2) eligible.push(i);
   }
 
   if (eligible.length === 0) return [];
@@ -118,98 +137,93 @@ export function detectClusters(
     }
   }
 
-  const buckets = new Map<number, string[]>();
+  const rootToIndices = new Map<number, number[]>();
   for (let a = 0; a < eligible.length; a++) {
     const root = uf.find(a);
-    const gid = eligible[a]!;
-    const id = agents[gid]!.id;
-    let list = buckets.get(root);
-    if (!list) {
-      list = [];
-      buckets.set(root, list);
+    const gi = eligible[a]!;
+    let arr = rootToIndices.get(root);
+    if (!arr) {
+      arr = [];
+      rootToIndices.set(root, arr);
     }
-    list.push(id);
+    arr.push(gi);
   }
 
-  const minSize = DEFAULT_MIN_CLUSTER_SIZE;
-  const raw: Cluster[] = [];
-  for (const ids of buckets.values()) {
-    if (ids.length >= minSize) {
-      ids.sort((x, y) => x.localeCompare(y));
-      raw.push({ id: -1, memberIds: ids });
+  const components: number[][] = [];
+  for (const indices of rootToIndices.values()) {
+    if (indices.length >= MIN_CLUSTER_SIZE) {
+      components.push(indices);
     }
   }
 
-  raw.sort((c1, c2) => {
-    const d = c2.memberIds.length - c1.memberIds.length;
+  components.sort((ia, ib) => {
+    const d = ib.length - ia.length;
     if (d !== 0) return d;
-    const m1 = c1.memberIds[0] ?? "";
-    const m2 = c2.memberIds[0] ?? "";
-    return m1.localeCompare(m2);
+    const amin = Math.min(...ia.map((i) => agents[i]!.id));
+    const bmin = Math.min(...ib.map((i) => agents[i]!.id));
+    return amin - bmin;
   });
 
-  return raw.map((c, idx) => ({ ...c, id: idx }));
+  return components.map((indices, idx) =>
+    buildClusterFromIndices(agents, indices, idx),
+  );
 }
 
 export function extractSnapshot(
   agents: Agent[],
-  rules: PerceptionRules | null | undefined,
-  previousSnapshot: SimSnapshot | null | undefined,
+  rules: RuleWeights,
+  previousSnapshot: SimSnapshot | null,
 ): SimSnapshot {
-  const timestampMs = Date.now();
-  const radius = rules?.clusterRadiusPx ?? DEFAULT_RADIUS_PX;
-  const minCluster =
-    rules?.minClusterSize ?? DEFAULT_MIN_CLUSTER_SIZE;
+  const timestamp = Date.now();
+  const clusters = detectClusters(agents, DEFAULT_CLUSTER_RADIUS_PX);
+  const clusterCount = clusters.length;
+  const agentCount = agents.length;
 
-  let clusters = detectClusters(agents, radius).filter(
-    (c) => c.memberIds.length >= minCluster,
+  const clustered = new Set<number>();
+  for (const c of clusters) {
+    for (const id of c.agentIds) clustered.add(id);
+  }
+  const outlierCount = agents.reduce(
+    (acc, a) => acc + (clustered.has(a.id) ? 0 : 1),
+    0,
   );
-  clusters = clusters.map((c, idx) => ({ ...c, id: idx }));
 
-  const velocityVariance = meanSpeedVariance(agents);
-  const dominantDirection = circularMeanHeading(agents);
+  const averageVelocity = meanSpeed(agents);
+  const velVar = velocityVarianceMag(agents);
+  const domDir = dominantDirectionFromVelocity(agents);
 
-  const prevCount = previousSnapshot?.clusters.length ?? 0;
-  const currCount = clusters.length;
-  const clusterCountDelta = currCount - prevCount;
+  const prevClusterCount = previousSnapshot?.clusterCount ?? 0;
+  const clusterCountDelta = clusterCount - prevClusterCount;
 
-  let clusterCountLastChangedAtMs: number;
+  let timeSinceLastChange: number;
   if (!previousSnapshot) {
-    clusterCountLastChangedAtMs = timestampMs;
-  } else if (currCount !== prevCount) {
-    clusterCountLastChangedAtMs = timestampMs;
+    timeSinceLastChange = 0;
+  } else if (clusterCount !== previousSnapshot.clusterCount) {
+    timeSinceLastChange = 0;
   } else {
-    clusterCountLastChangedAtMs =
-      previousSnapshot.clusterCountLastChangedAtMs;
+    timeSinceLastChange =
+      previousSnapshot.delta.timeSinceLastChange +
+      (timestamp - previousSnapshot.timestamp);
   }
 
-  const timeSinceLastChange =
-    timestampMs - clusterCountLastChangedAtMs;
-
-  const velocityVarianceDelta = previousSnapshot
-    ? velocityVariance - previousSnapshot.velocityVariance
+  const avgVelocityDelta = previousSnapshot
+    ? averageVelocity - previousSnapshot.averageVelocity
     : 0;
-
-  const dominantDirectionDelta = previousSnapshot
-    ? circularDiff(
-        dominantDirection,
-        previousSnapshot.dominantDirection,
-      )
-    : 0;
-
-  const delta = {
-    clusterCountDelta,
-    timeSinceLastChange,
-    velocityVarianceDelta,
-    dominantDirectionDelta,
-  };
 
   return {
-    timestampMs,
+    timestamp,
+    agentCount,
+    clusterCount,
     clusters,
-    velocityVariance,
-    dominantDirection,
-    clusterCountLastChangedAtMs,
-    delta,
+    outlierCount,
+    averageVelocity,
+    velocityVariance: velVar,
+    dominantDirection: domDir,
+    delta: {
+      clusterCountDelta,
+      avgVelocityDelta,
+      timeSinceLastChange,
+    },
+    currentRules: { ...rules },
   };
 }
