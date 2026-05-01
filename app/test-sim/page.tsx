@@ -26,10 +26,10 @@ export default function TestSimPage() {
     const loop = () => {
       tick(agents, rules, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      ctx.fillStyle = "#0a0a0a";
+      ctx.fillStyle = "#050505";
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      ctx.fillStyle = "#7dd3fc";
+      ctx.fillStyle = "#7CF8FF";
       for (let i = 0; i < agents.length; i++) {
         const a = agents[i];
         ctx.beginPath();

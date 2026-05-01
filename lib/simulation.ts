@@ -1,7 +1,31 @@
 import type { Agent, RuleWeights } from "./types";
 
-/** Soft boundary: steering within this distance (px) of each canvas edge. */
+/** Soft boundary: steering within this distance (px) of each canvas edge (spec §4.1, D14). */
 const BOUNDARY_MARGIN = 50;
+
+/** Steer inward near edges; tuned with boundary margin so forces stay moderate at default speed. */
+const BOUNDARY_STRENGTH = 0.08;
+
+let bufN = 0;
+let sepX: Float64Array = new Float64Array(0);
+let sepY: Float64Array = new Float64Array(0);
+let aliX: Float64Array = new Float64Array(0);
+let aliY: Float64Array = new Float64Array(0);
+let cohX: Float64Array = new Float64Array(0);
+let cohY: Float64Array = new Float64Array(0);
+let neigh: Uint16Array = new Uint16Array(0);
+
+function ensureBuffers(n: number): void {
+  if (n <= bufN) return;
+  bufN = n;
+  sepX = new Float64Array(n);
+  sepY = new Float64Array(n);
+  aliX = new Float64Array(n);
+  aliY = new Float64Array(n);
+  cohX = new Float64Array(n);
+  cohY = new Float64Array(n);
+  neigh = new Uint16Array(n);
+}
 
 function distSq(ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax;
@@ -21,7 +45,7 @@ function clampMag(x: number, y: number, max: number): [number, number] {
 }
 
 /**
- * Spreads agents uniformly over the canvas with small random velocities.
+ * Random positions and velocities on the canvas. Each agent gets a stable `id` (0 .. count-1).
  */
 export function initAgents(count: number, width: number, height: number): Agent[] {
   const agents: Agent[] = [];
@@ -29,6 +53,7 @@ export function initAgents(count: number, width: number, height: number): Agent[
     const angle = Math.random() * Math.PI * 2;
     const speed = 0.5 + Math.random() * 1.5;
     agents.push({
+      id: i,
       x: Math.random() * width,
       y: Math.random() * height,
       vx: Math.cos(angle) * speed,
@@ -38,19 +63,20 @@ export function initAgents(count: number, width: number, height: number): Agent[
   return agents;
 }
 
+/** Defaults match `lib/types.ts` and system prompt examples in spec §4.4. */
 export const DEFAULT_RULES: RuleWeights = {
-  separation: 1.25,
-  alignment: 0.85,
-  cohesion: 0.65,
-  speed: 4,
-  perception: 55,
+  separation: 1.5,
+  alignment: 1.0,
+  cohesion: 1.0,
+  speed: 2.0,
+  perception: 50,
 };
 
 const FRAME_DT = 1;
 
 /**
- * One simulation step: boids (separation, alignment, cohesion), soft boundary, speed cap.
- * Mutates agents in place. Neighbor search uses `rules.perception` as radius.
+ * One physics step: boids (separation within perception/3, alignment + cohesion within perception),
+ * soft boundary, speed cap. Mutates `agents` in place; reuses internal buffers (no per-tick allocation).
  */
 export function tick(
   agents: Agent[],
@@ -61,17 +87,21 @@ export function tick(
   const n = agents.length;
   if (n === 0) return;
 
-  const r = rules.perception;
-  const r2 = r * r;
+  ensureBuffers(n);
+
+  const perception = rules.perception;
+  const r2 = perception * perception;
+  const rSep = perception / 3;
+  const rSep2 = rSep * rSep;
   const margin = BOUNDARY_MARGIN;
 
-  const sepX = new Float64Array(n);
-  const sepY = new Float64Array(n);
-  const aliX = new Float64Array(n);
-  const aliY = new Float64Array(n);
-  const cohX = new Float64Array(n);
-  const cohY = new Float64Array(n);
-  const neigh = new Uint16Array(n);
+  sepX.fill(0, 0, n);
+  sepY.fill(0, 0, n);
+  aliX.fill(0, 0, n);
+  aliY.fill(0, 0, n);
+  cohX.fill(0, 0, n);
+  cohY.fill(0, 0, n);
+  neigh.fill(0, 0, n);
 
   for (let i = 0; i < n; i++) {
     const ai = agents[i];
@@ -91,11 +121,15 @@ export function tick(
 
       count++;
       const d = Math.sqrt(d2);
-      const invD = 1 / d;
-      const ox = (ai.x - aj.x) * invD;
-      const oy = (ai.y - aj.y) * invD;
-      sx += ox / d;
-      sy += oy / d;
+
+      if (d2 < rSep2) {
+        const invD = 1 / d;
+        const ox = (ai.x - aj.x) * invD;
+        const oy = (ai.y - aj.y) * invD;
+        sx += ox / d;
+        sy += oy / d;
+      }
+
       ax += aj.vx;
       ay += aj.vy;
       cx += aj.x;
@@ -112,8 +146,6 @@ export function tick(
       cohY[i] = cy / count - ai.y;
     }
   }
-
-  const boundaryK = 0.08;
 
   for (let i = 0; i < n; i++) {
     const a = agents[i];
@@ -151,11 +183,11 @@ export function tick(
       fy += cy * rules.cohesion;
     }
 
-    if (a.x < margin) fx += (margin - a.x) * boundaryK;
-    else if (a.x > width - margin) fx -= (a.x - (width - margin)) * boundaryK;
+    if (a.x < margin) fx += (margin - a.x) * BOUNDARY_STRENGTH;
+    else if (a.x > width - margin) fx -= (a.x - (width - margin)) * BOUNDARY_STRENGTH;
 
-    if (a.y < margin) fy += (margin - a.y) * boundaryK;
-    else if (a.y > height - margin) fy -= (a.y - (height - margin)) * boundaryK;
+    if (a.y < margin) fy += (margin - a.y) * BOUNDARY_STRENGTH;
+    else if (a.y > height - margin) fy -= (a.y - (height - margin)) * BOUNDARY_STRENGTH;
 
     a.vx += fx * FRAME_DT;
     a.vy += fy * FRAME_DT;
