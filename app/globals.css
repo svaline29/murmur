@@ -3,6 +3,24 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Murmur — spec §5.3 & §4.6 visual tokens */
+  --bg-page: #0a0a0a;
+  --bg-canvas: #050505;
+  --bg-panel: rgba(255, 255, 255, 0.02);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-primary: #e8f4ff;
+  --text-secondary: rgba(232, 244, 255, 0.55);
+  --text-mono: #b8c5d6;
+  --accent: #7cf8ff;
+  --accent-glow: rgba(124, 248, 255, 0.4);
+  --accent-soft: rgba(124, 248, 255, 0.15);
+  --agent-color: #e8f4ff;
+  --agent-glow: rgba(124, 248, 255, 0.4);
+  --trail-color: rgba(232, 244, 255, 0.6);
+  --highlight-stroke: #7cf8ff;
+  --highlight-glow: rgba(124, 248, 255, 0.8);
+  --grid-color: rgba(255, 255, 255, 0.04);
 }
 
 @theme inline {
