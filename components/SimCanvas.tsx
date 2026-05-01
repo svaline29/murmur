@@ -7,6 +7,11 @@ import {
   type ReactElement,
 } from "react";
 
+import { clusterHighlightRgb } from "@/lib/clusterColors";
+import {
+  HIGHLIGHT_AUTO_FADE_MS,
+  PINNED_HIGHLIGHT_MS,
+} from "@/lib/highlightTiming";
 import type { Agent, Cluster } from "@/lib/types";
 
 /** Matches `useSimulation` / spec §4.1 logical canvas size (render-only — no physics import). */
@@ -159,12 +164,40 @@ function createAgentGlowCache(palette: CanvasPalette): HTMLCanvasElement {
   return g;
 }
 
+export type HighlightLayerKind = "auto" | "pin" | "hover";
+
 export type HighlightLayer = {
   clusterId: number;
   frozenClusters: Cluster[];
-  /** When non-null, layer is skipped after this `performance.now()` time (auto-highlight). */
+  kind: HighlightLayerKind;
+  /** performance.now() when this layer began (pins use for fade-out). */
+  startedAt: number;
+  /** Auto only: hard end time (performance.now()); tail fade uses HIGHLIGHT_AUTO_FADE_MS. */
   expiresAt: number | null;
 };
+
+function highlightOpacityMultiplier(
+  now: number,
+  layer: HighlightLayer,
+): number {
+  switch (layer.kind) {
+    case "hover":
+      return 1;
+    case "auto": {
+      const exp = layer.expiresAt;
+      if (exp === null) return 1;
+      if (now >= exp) return 0;
+      const fadeStart = exp - HIGHLIGHT_AUTO_FADE_MS;
+      if (now <= fadeStart) return 1;
+      return 1 - smoothstep01((now - fadeStart) / HIGHLIGHT_AUTO_FADE_MS);
+    }
+    case "pin": {
+      const t = (now - layer.startedAt) / PINNED_HIGHLIGHT_MS;
+      if (t >= 1) return 0;
+      return 1 - smoothstep01(t);
+    }
+  }
+}
 
 export type SimCanvasProps = {
   agentsRef: MutableRefObject<Agent[]>;
@@ -264,8 +297,9 @@ export function SimCanvas({
       const capped = layers.slice(0, MAX_HIGHLIGHT_LAYERS);
 
       for (const layer of capped) {
-        const { clusterId: hid, frozenClusters: fc, expiresAt } = layer;
-        if (expiresAt !== null && now > expiresAt) continue;
+        const { clusterId: hid, frozenClusters: fc } = layer;
+        const opacityMul = highlightOpacityMultiplier(now, layer);
+        if (opacityMul <= 0.002) continue;
 
         const cluster = fc.find((c) => c.id === hid);
         if (!cluster || cluster.agentIds.length === 0) continue;
@@ -295,12 +329,16 @@ export function SimCanvas({
           radius = Math.max(radius, Math.hypot(ag.x - cx, ag.y - cy) + 20);
         }
 
+        const { r, g, b } = clusterHighlightRgb(hid);
         const phase = (now / HIGHLIGHT_PULSE_MS) * Math.PI * 2;
-        const innerAlpha = 0.25 + 0.1 * Math.sin(phase);
+        const innerAlpha = (0.25 + 0.1 * Math.sin(phase)) * opacityMul;
         const gradient = ctx2d.createRadialGradient(cx, cy, 0, cx, cy, radius);
-        gradient.addColorStop(0, `rgba(124, 248, 255, ${innerAlpha})`);
-        gradient.addColorStop(0.6, "rgba(124, 248, 255, 0.08)");
-        gradient.addColorStop(1, "rgba(124, 248, 255, 0)");
+        gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${innerAlpha})`);
+        gradient.addColorStop(
+          0.6,
+          `rgba(${r}, ${g}, ${b}, ${0.08 * opacityMul})`,
+        );
+        gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
 
         ctx2d.save();
         ctx2d.fillStyle = gradient;

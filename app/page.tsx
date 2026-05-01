@@ -13,6 +13,7 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { MetricsPanel } from "@/components/MetricsPanel";
 import { SimCanvas, type HighlightLayer } from "@/components/SimCanvas";
 import { useSimulation } from "@/hooks/useSimulation";
+import { PINNED_HIGHLIGHT_MS } from "@/lib/highlightTiming";
 import { DEFAULT_RULES } from "@/lib/simulation";
 import type { ChatMessage, ClaudeResponse, Cluster, RuleWeights } from "@/lib/types";
 
@@ -33,9 +34,9 @@ export default function Home(): ReactElement {
   const [hoveredFrozenClusters, setHoveredFrozenClusters] = useState<
     Cluster[] | null
   >(null);
-  /** Badge-click pins: cluster IDs are unique; each carries its reply snapshot for hull lookup. */
+  /** Badge-click pins; `pinnedAt` drives canvas fade and automatic removal. */
   const [pinnedHighlights, setPinnedHighlights] = useState<
-    { clusterId: number; frozenClusters: Cluster[] }[]
+    { clusterId: number; frozenClusters: Cluster[]; pinnedAt: number }[]
   >([]);
   const [autoHighlightClusterId, setAutoHighlightClusterId] = useState<
     number | null
@@ -45,6 +46,11 @@ export default function Home(): ReactElement {
   const [autoHighlightExpiresAt, setAutoHighlightExpiresAt] = useState<
     number | null
   >(null);
+  const [autoHighlightStartedAt, setAutoHighlightStartedAt] = useState<
+    number | null
+  >(null);
+
+  const pinTimeoutsRef = useRef<Map<number, number>>(new Map());
   const [metricsVisible, setMetricsVisible] = useState(true);
   const [devPanelVisible, setDevPanelVisible] = useState(false);
   const [devRules, setDevRules] = useState<RuleWeights>({ ...DEFAULT_RULES });
@@ -61,6 +67,39 @@ export default function Home(): ReactElement {
   useEffect(() => {
     return () => clearHighlightTimer();
   }, [clearHighlightTimer]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of pinTimeoutsRef.current.values()) {
+        clearTimeout(t);
+      }
+      pinTimeoutsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    const timers = pinTimeoutsRef.current;
+    for (const p of pinnedHighlights) {
+      if (timers.has(p.clusterId)) continue;
+      const cid = p.clusterId;
+      const delay = Math.max(
+        0,
+        PINNED_HIGHLIGHT_MS - (performance.now() - p.pinnedAt),
+      );
+      const tid = window.setTimeout(() => {
+        timers.delete(cid);
+        setPinnedHighlights((cur) => cur.filter((x) => x.clusterId !== cid));
+      }, delay);
+      timers.set(cid, tid);
+    }
+    for (const id of [...timers.keys()]) {
+      if (!pinnedHighlights.some((p) => p.clusterId === id)) {
+        const t = timers.get(id);
+        if (t !== undefined) clearTimeout(t);
+        timers.delete(id);
+      }
+    }
+  }, [pinnedHighlights]);
 
   useEffect(() => {
     if (devPanelVisible) {
@@ -103,7 +142,14 @@ export default function Home(): ReactElement {
       setPinnedHighlights((prev) => {
         const i = prev.findIndex((p) => p.clusterId === clusterId);
         if (i !== -1) return prev.filter((_, j) => j !== i);
-        return [...prev, { clusterId, frozenClusters }];
+        return [
+          ...prev,
+          {
+            clusterId,
+            frozenClusters,
+            pinnedAt: performance.now(),
+          },
+        ];
       });
     },
     [],
@@ -113,40 +159,49 @@ export default function Home(): ReactElement {
     const layers: HighlightLayer[] = [];
     const seen = new Set<number>();
 
-    function push(
-      clusterId: number,
-      frozenClusters: Cluster[] | null | undefined,
-      expiresAt: number | null,
-    ): void {
+    function push(layer: HighlightLayer): void {
       if (
         layers.length >= 5 ||
-        frozenClusters == null ||
-        frozenClusters.length === 0 ||
-        seen.has(clusterId)
+        layer.frozenClusters.length === 0 ||
+        seen.has(layer.clusterId)
       ) {
         return;
       }
-      seen.add(clusterId);
-      layers.push({ clusterId, frozenClusters, expiresAt });
+      seen.add(layer.clusterId);
+      layers.push(layer);
     }
 
     if (
       autoHighlightClusterId !== null &&
       autoHighlightFrozenClusters !== null
     ) {
-      push(
-        autoHighlightClusterId,
-        autoHighlightFrozenClusters,
-        autoHighlightExpiresAt,
-      );
+      push({
+        clusterId: autoHighlightClusterId,
+        frozenClusters: autoHighlightFrozenClusters,
+        kind: "auto",
+        startedAt: autoHighlightStartedAt ?? 0,
+        expiresAt: autoHighlightExpiresAt,
+      });
     }
 
-    for (const { clusterId, frozenClusters } of pinnedHighlights) {
-      push(clusterId, frozenClusters, null);
+    for (const { clusterId, frozenClusters, pinnedAt } of pinnedHighlights) {
+      push({
+        clusterId,
+        frozenClusters,
+        kind: "pin",
+        startedAt: pinnedAt,
+        expiresAt: null,
+      });
     }
 
     if (hoveredClusterId !== null && hoveredFrozenClusters !== null) {
-      push(hoveredClusterId, hoveredFrozenClusters, null);
+      push({
+        clusterId: hoveredClusterId,
+        frozenClusters: hoveredFrozenClusters,
+        kind: "hover",
+        startedAt: 0,
+        expiresAt: null,
+      });
     }
 
     return layers;
@@ -154,6 +209,7 @@ export default function Home(): ReactElement {
     autoHighlightClusterId,
     autoHighlightFrozenClusters,
     autoHighlightExpiresAt,
+    autoHighlightStartedAt,
     pinnedHighlights,
     hoveredClusterId,
     hoveredFrozenClusters,
@@ -184,6 +240,7 @@ export default function Home(): ReactElement {
       setAutoHighlightClusterId(null);
       setAutoHighlightFrozenClusters(null);
       setAutoHighlightExpiresAt(null);
+      setAutoHighlightStartedAt(null);
 
       const frozenSnapshot = structuredClone(snapshot);
       const frozenClustersForThisExchange = frozenSnapshot.clusters;
@@ -213,14 +270,17 @@ export default function Home(): ReactElement {
         }
 
         if (data.highlight_cluster != null) {
+          const t0 = performance.now();
           setAutoHighlightClusterId(data.highlight_cluster);
           setAutoHighlightFrozenClusters(frozenSnapshot.clusters);
-          setAutoHighlightExpiresAt(performance.now() + HIGHLIGHT_CLEAR_MS);
+          setAutoHighlightStartedAt(t0);
+          setAutoHighlightExpiresAt(t0 + HIGHLIGHT_CLEAR_MS);
           clearHighlightTimer();
           highlightClearRef.current = window.setTimeout(() => {
             setAutoHighlightClusterId(null);
             setAutoHighlightFrozenClusters(null);
             setAutoHighlightExpiresAt(null);
+            setAutoHighlightStartedAt(null);
             highlightClearRef.current = null;
           }, HIGHLIGHT_CLEAR_MS);
         }

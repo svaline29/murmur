@@ -8,6 +8,7 @@ import {
   type ReactElement,
 } from "react";
 
+import { clusterHueDegrees } from "@/lib/clusterColors";
 import { parseClusterReferences } from "@/lib/messageParser";
 import type { ChatMessage, Cluster } from "@/lib/types";
 
@@ -35,6 +36,8 @@ function ClusterBadge({
     frozenClusters !== null &&
     frozenClusters.some((c) => c.id === clusterId);
 
+  const hue = clusterHueDegrees(clusterId);
+
   return (
     <button
       type="button"
@@ -48,7 +51,18 @@ function ClusterBadge({
         e.stopPropagation();
         if (exists) onClick(clusterId);
       }}
-      className="mx-0.5 inline cursor-pointer align-baseline rounded bg-[var(--accent-soft)] px-0.5 font-mono text-[13px] leading-[inherit] text-[var(--accent)] transition-colors duration-150 hover:bg-[var(--accent-glow)] disabled:cursor-not-allowed disabled:opacity-40"
+      className="mx-0.5 inline cursor-pointer align-baseline rounded px-0.5 font-mono text-[13px] leading-[inherit] transition-[filter,opacity] duration-150 hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-40"
+      style={
+        exists
+          ? {
+              background: `hsla(${hue}, 62%, 40%, 0.32)`,
+              color: `hsl(${hue}, 88%, 78%)`,
+            }
+          : {
+              background: "var(--accent-soft)",
+              color: "var(--text-secondary)",
+            }
+      }
     >
       {label}
     </button>
