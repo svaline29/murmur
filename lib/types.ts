@@ -54,4 +54,6 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  /** Present on assistant messages: cluster snapshot from the user send that produced this reply. */
+  frozenClusters?: Cluster[];
 }

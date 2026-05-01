@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactElement,
+} from "react";
 
-import type { ChatMessage } from "@/lib/types";
+import { parseClusterReferences } from "@/lib/messageParser";
+import type { ChatMessage, Cluster } from "@/lib/types";
 
 const PRESETS = [
   "What's happening right now?",
@@ -11,16 +18,63 @@ const PRESETS = [
   "Form one tight flock",
 ] as const;
 
+function ClusterBadge({
+  clusterId,
+  label,
+  frozenClusters,
+  onHover,
+  onClick,
+}: {
+  clusterId: number;
+  label: string;
+  frozenClusters: Cluster[] | null;
+  onHover: (clusterId: number | null) => void;
+  onClick: (clusterId: number) => void;
+}): ReactElement {
+  const exists =
+    frozenClusters !== null &&
+    frozenClusters.some((c) => c.id === clusterId);
+
+  return (
+    <button
+      type="button"
+      tabIndex={0}
+      disabled={!exists}
+      title={exists ? `Cluster ${clusterId}` : "Cluster not in this reply's snapshot"}
+      onMouseEnter={() => exists && onHover(clusterId)}
+      onMouseLeave={() => onHover(null)}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (exists) onClick(clusterId);
+      }}
+      className="mx-0.5 inline cursor-pointer align-baseline rounded bg-[var(--accent-soft)] px-0.5 font-mono text-[13px] leading-[inherit] text-[var(--accent)] transition-colors duration-150 hover:bg-[var(--accent-glow)] disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {label}
+    </button>
+  );
+}
+
 export type ChatPanelProps = {
   history: ChatMessage[];
   onSendMessage: (message: string) => void;
   isPending: boolean;
+  onClusterBadgeHover: (
+    clusterId: number | null,
+    frozenClusters: Cluster[] | null,
+  ) => void;
+  onClusterBadgeClick: (
+    clusterId: number,
+    frozenClusters: Cluster[],
+  ) => void;
 };
 
 export function ChatPanel({
   history,
   onSendMessage,
   isPending,
+  onClusterBadgeHover,
+  onClusterBadgeClick,
 }: ChatPanelProps): ReactElement {
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -39,6 +93,35 @@ export function ChatPanel({
   function onSubmit(e: FormEvent): void {
     e.preventDefault();
     submit();
+  }
+
+  function renderAssistantContent(msg: ChatMessage): ReactElement {
+    const frozen = msg.frozenClusters ?? null;
+    const segments = parseClusterReferences(msg.content);
+    return (
+      <p className="leading-[1.65] text-[var(--text-primary)]">
+        {segments.map((seg, idx) => {
+          if (seg.type === "text") {
+            return (
+              <span key={`t-${msg.timestamp}-${idx}`}>{seg.content}</span>
+            );
+          }
+          const label = seg.raw.slice(1, -1);
+          return (
+            <ClusterBadge
+              key={`c-${msg.timestamp}-${idx}-${seg.clusterId}`}
+              clusterId={seg.clusterId}
+              label={label}
+              frozenClusters={frozen}
+              onHover={(id) => onClusterBadgeHover(id, frozen)}
+              onClick={(id) =>
+                onClusterBadgeClick(id, frozen ?? [])
+              }
+            />
+          );
+        })}
+      </p>
+    );
   }
 
   return (
@@ -73,10 +156,10 @@ export function ChatPanel({
             ) : (
               <div key={`${m.timestamp}-a-${i}`} className="flex justify-start">
                 <div className="max-w-[94%] px-1 py-2">
-                  <p className="leading-[1.65] text-[var(--text-primary)]">{m.content}</p>
+                  {renderAssistantContent(m)}
                 </div>
               </div>
-            )
+            ),
           )}
 
           {isPending ? (

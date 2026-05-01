@@ -26,6 +26,8 @@ Style:
 - Reference specific numbers when they support the point.
 - Don't narrate every metric. Pick what matters.
 
+When referencing specific clusters in your message, wrap them in square brackets with the format [cluster N] where N is the integer cluster ID from the snapshot. Example: 'The agents in [cluster 0] are dispersing while [cluster 2] is gaining cohesion.' Use this whenever you reference a specific cluster by id, but not for general statements about 'the swarm' or 'all clusters'.
+
 You MUST always return valid JSON in this exact shape:
 {
   "message": "<your conversational response, always present>",

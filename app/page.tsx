@@ -1,10 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 
 import { ChatPanel } from "@/components/ChatPanel";
 import { MetricsPanel } from "@/components/MetricsPanel";
-import { SimCanvas } from "@/components/SimCanvas";
+import { SimCanvas, type HighlightLayer } from "@/components/SimCanvas";
 import { useSimulation } from "@/hooks/useSimulation";
 import { DEFAULT_RULES } from "@/lib/simulation";
 import type { ChatMessage, ClaudeResponse, Cluster, RuleWeights } from "@/lib/types";
@@ -22,8 +29,22 @@ export default function Home(): ReactElement {
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isPending, setIsPending] = useState(false);
-  const [highlightClusterId, setHighlightClusterId] = useState<number | null>(null);
-  const [frozenClusters, setFrozenClusters] = useState<Cluster[] | null>(null);
+  const [hoveredClusterId, setHoveredClusterId] = useState<number | null>(null);
+  const [hoveredFrozenClusters, setHoveredFrozenClusters] = useState<
+    Cluster[] | null
+  >(null);
+  /** Badge-click pins: cluster IDs are unique; each carries its reply snapshot for hull lookup. */
+  const [pinnedHighlights, setPinnedHighlights] = useState<
+    { clusterId: number; frozenClusters: Cluster[] }[]
+  >([]);
+  const [autoHighlightClusterId, setAutoHighlightClusterId] = useState<
+    number | null
+  >(null);
+  const [autoHighlightFrozenClusters, setAutoHighlightFrozenClusters] =
+    useState<Cluster[] | null>(null);
+  const [autoHighlightExpiresAt, setAutoHighlightExpiresAt] = useState<
+    number | null
+  >(null);
   const [metricsVisible, setMetricsVisible] = useState(true);
   const [devPanelVisible, setDevPanelVisible] = useState(false);
   const [devRules, setDevRules] = useState<RuleWeights>({ ...DEFAULT_RULES });
@@ -47,8 +68,16 @@ export default function Home(): ReactElement {
     }
   }, [devPanelVisible, rulesRef]);
 
+  const clearPinnedClusters = useCallback(() => {
+    setPinnedHighlights([]);
+  }, []);
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === "Escape") {
+        clearPinnedClusters();
+        return;
+      }
       if (e.key !== "d" && e.key !== "D") return;
       const t = e.target;
       if (t instanceof Element && t.closest("input, textarea, [contenteditable=true]")) {
@@ -59,7 +88,76 @@ export default function Home(): ReactElement {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [clearPinnedClusters]);
+
+  const onClusterBadgeHover = useCallback(
+    (clusterId: number | null, frozenClusters: Cluster[] | null) => {
+      setHoveredClusterId(clusterId);
+      setHoveredFrozenClusters(frozenClusters);
+    },
+    [],
+  );
+
+  const toggleClusterPin = useCallback(
+    (clusterId: number, frozenClusters: Cluster[]) => {
+      setPinnedHighlights((prev) => {
+        const i = prev.findIndex((p) => p.clusterId === clusterId);
+        if (i !== -1) return prev.filter((_, j) => j !== i);
+        return [...prev, { clusterId, frozenClusters }];
+      });
+    },
+    [],
+  );
+
+  const highlightLayers = useMemo((): HighlightLayer[] => {
+    const layers: HighlightLayer[] = [];
+    const seen = new Set<number>();
+
+    function push(
+      clusterId: number,
+      frozenClusters: Cluster[] | null | undefined,
+      expiresAt: number | null,
+    ): void {
+      if (
+        layers.length >= 5 ||
+        frozenClusters == null ||
+        frozenClusters.length === 0 ||
+        seen.has(clusterId)
+      ) {
+        return;
+      }
+      seen.add(clusterId);
+      layers.push({ clusterId, frozenClusters, expiresAt });
+    }
+
+    if (
+      autoHighlightClusterId !== null &&
+      autoHighlightFrozenClusters !== null
+    ) {
+      push(
+        autoHighlightClusterId,
+        autoHighlightFrozenClusters,
+        autoHighlightExpiresAt,
+      );
+    }
+
+    for (const { clusterId, frozenClusters } of pinnedHighlights) {
+      push(clusterId, frozenClusters, null);
+    }
+
+    if (hoveredClusterId !== null && hoveredFrozenClusters !== null) {
+      push(hoveredClusterId, hoveredFrozenClusters, null);
+    }
+
+    return layers;
+  }, [
+    autoHighlightClusterId,
+    autoHighlightFrozenClusters,
+    autoHighlightExpiresAt,
+    pinnedHighlights,
+    hoveredClusterId,
+    hoveredFrozenClusters,
+  ]);
 
   const patchDevRule = useCallback((key: keyof RuleWeights, value: number) => {
     setDevRules((r) => {
@@ -83,10 +181,12 @@ export default function Home(): ReactElement {
       setChatHistory((h) => [...h, userMsg]);
       setIsPending(true);
       clearHighlightTimer();
-      setHighlightClusterId(null);
-      setFrozenClusters(null);
+      setAutoHighlightClusterId(null);
+      setAutoHighlightFrozenClusters(null);
+      setAutoHighlightExpiresAt(null);
 
       const frozenSnapshot = structuredClone(snapshot);
+      const frozenClustersForThisExchange = frozenSnapshot.clusters;
 
       try {
         const res = await fetch("/api/chat", {
@@ -104,6 +204,7 @@ export default function Home(): ReactElement {
           role: "assistant",
           content: data.message,
           timestamp: Date.now(),
+          frozenClusters: frozenClustersForThisExchange,
         };
         setChatHistory((h) => [...h, assistantMsg]);
 
@@ -112,12 +213,14 @@ export default function Home(): ReactElement {
         }
 
         if (data.highlight_cluster != null) {
-          setHighlightClusterId(data.highlight_cluster);
-          setFrozenClusters(frozenSnapshot.clusters);
+          setAutoHighlightClusterId(data.highlight_cluster);
+          setAutoHighlightFrozenClusters(frozenSnapshot.clusters);
+          setAutoHighlightExpiresAt(performance.now() + HIGHLIGHT_CLEAR_MS);
           clearHighlightTimer();
           highlightClearRef.current = window.setTimeout(() => {
-            setHighlightClusterId(null);
-            setFrozenClusters(null);
+            setAutoHighlightClusterId(null);
+            setAutoHighlightFrozenClusters(null);
+            setAutoHighlightExpiresAt(null);
             highlightClearRef.current = null;
           }, HIGHLIGHT_CLEAR_MS);
         }
@@ -128,6 +231,7 @@ export default function Home(): ReactElement {
             role: "assistant",
             content: "Request failed — check your connection and try again.",
             timestamp: Date.now(),
+            frozenClusters: frozenClustersForThisExchange,
           },
         ]);
       } finally {
@@ -216,8 +320,8 @@ export default function Home(): ReactElement {
           ) : null}
           <SimCanvas
             agentsRef={agentsRef}
-            highlightClusterId={highlightClusterId}
-            frozenClusters={frozenClusters}
+            highlightLayers={highlightLayers}
+            onCanvasPointerDown={clearPinnedClusters}
           />
         </div>
         <MetricsPanel
@@ -227,7 +331,13 @@ export default function Home(): ReactElement {
         />
       </div>
       <div className="flex w-[30%] min-w-0 flex-col">
-        <ChatPanel history={chatHistory} onSendMessage={handleSendMessage} isPending={isPending} />
+        <ChatPanel
+          history={chatHistory}
+          onSendMessage={handleSendMessage}
+          isPending={isPending}
+          onClusterBadgeHover={onClusterBadgeHover}
+          onClusterBadgeClick={toggleClusterPin}
+        />
       </div>
     </div>
   );

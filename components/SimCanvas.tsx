@@ -15,8 +15,6 @@ const LOGICAL_HEIGHT = 800;
 
 /** Highlight pulse period — spec §4.6 / §5.5 */
 const HIGHLIGHT_PULSE_MS = 1200;
-/** Spec §4.6 — highlight duration before visual expiry */
-const HIGHLIGHT_DURATION_MS = 8000;
 
 /** Grid line spacing — spec §4.6 */
 const GRID_STEP = 50;
@@ -161,35 +159,35 @@ function createAgentGlowCache(palette: CanvasPalette): HTMLCanvasElement {
   return g;
 }
 
+export type HighlightLayer = {
+  clusterId: number;
+  frozenClusters: Cluster[];
+  /** When non-null, layer is skipped after this `performance.now()` time (auto-highlight). */
+  expiresAt: number | null;
+};
+
 export type SimCanvasProps = {
   agentsRef: MutableRefObject<Agent[]>;
-  highlightClusterId: number | null;
-  frozenClusters: Cluster[] | null;
+  highlightLayers: HighlightLayer[];
+  /** Clears UI-owned pins when the user presses the canvas (e.g. primary button). */
+  onCanvasPointerDown?: () => void;
 };
+
+const MAX_HIGHLIGHT_LAYERS = 5;
 
 export function SimCanvas({
   agentsRef,
-  highlightClusterId,
-  frozenClusters,
+  highlightLayers,
+  onCanvasPointerDown,
 }: SimCanvasProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const paletteRef = useRef<CanvasPalette | null>(null);
 
-  const highlightPropsRef = useRef({ highlightClusterId, frozenClusters });
+  const highlightPropsRef = useRef({ highlightLayers });
   useEffect(() => {
-    highlightPropsRef.current = { highlightClusterId, frozenClusters };
-  }, [highlightClusterId, frozenClusters]);
-
-  const highlightDeadlineRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (highlightClusterId !== null) {
-      highlightDeadlineRef.current = performance.now() + HIGHLIGHT_DURATION_MS;
-    } else {
-      highlightDeadlineRef.current = null;
-    }
-  }, [highlightClusterId]);
+    highlightPropsRef.current = { highlightLayers };
+  }, [highlightLayers]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -262,55 +260,54 @@ export function SimCanvas({
       ctx2d.shadowBlur = 0;
       ctx2d.shadowColor = "transparent";
 
-      const { highlightClusterId: hid, frozenClusters: fc } =
-        highlightPropsRef.current;
+      const { highlightLayers: layers } = highlightPropsRef.current;
+      const capped = layers.slice(0, MAX_HIGHLIGHT_LAYERS);
 
-      const deadline = highlightDeadlineRef.current;
-      const highlightExpired =
-        hid !== null && deadline !== null && now > deadline;
+      for (const layer of capped) {
+        const { clusterId: hid, frozenClusters: fc, expiresAt } = layer;
+        if (expiresAt !== null && now > expiresAt) continue;
 
-      if (hid !== null && fc !== null && !highlightExpired) {
         const cluster = fc.find((c) => c.id === hid);
-        if (cluster && cluster.agentIds.length > 0) {
-          const byId = new Map<number, Agent>();
-          for (const ag of agents) byId.set(ag.id, ag);
+        if (!cluster || cluster.agentIds.length === 0) continue;
 
-          let sx = 0;
-          let sy = 0;
-          let count = 0;
-          for (const id of cluster.agentIds) {
-            const ag = byId.get(id);
-            if (!ag) continue;
-            sx += ag.x;
-            sy += ag.y;
-            count++;
-          }
+        const byId = new Map<number, Agent>();
+        for (const ag of agents) byId.set(ag.id, ag);
 
-          if (count > 0) {
-            const cx = sx / count;
-            const cy = sy / count;
-            let radius = 20;
-            for (const id of cluster.agentIds) {
-              const ag = byId.get(id);
-              if (!ag) continue;
-              radius = Math.max(radius, Math.hypot(ag.x - cx, ag.y - cy) + 20);
-            }
-
-            const phase = (now / HIGHLIGHT_PULSE_MS) * Math.PI * 2;
-            const innerAlpha = 0.25 + 0.1 * Math.sin(phase);
-            const gradient = ctx2d.createRadialGradient(cx, cy, 0, cx, cy, radius);
-            gradient.addColorStop(0, `rgba(124, 248, 255, ${innerAlpha})`);
-            gradient.addColorStop(0.6, "rgba(124, 248, 255, 0.08)");
-            gradient.addColorStop(1, "rgba(124, 248, 255, 0)");
-
-            ctx2d.save();
-            ctx2d.fillStyle = gradient;
-            ctx2d.beginPath();
-            ctx2d.arc(cx, cy, radius, 0, Math.PI * 2);
-            ctx2d.fill();
-            ctx2d.restore();
-          }
+        let sx = 0;
+        let sy = 0;
+        let count = 0;
+        for (const id of cluster.agentIds) {
+          const ag = byId.get(id);
+          if (!ag) continue;
+          sx += ag.x;
+          sy += ag.y;
+          count++;
         }
+
+        if (count === 0) continue;
+
+        const cx = sx / count;
+        const cy = sy / count;
+        let radius = 20;
+        for (const id of cluster.agentIds) {
+          const ag = byId.get(id);
+          if (!ag) continue;
+          radius = Math.max(radius, Math.hypot(ag.x - cx, ag.y - cy) + 20);
+        }
+
+        const phase = (now / HIGHLIGHT_PULSE_MS) * Math.PI * 2;
+        const innerAlpha = 0.25 + 0.1 * Math.sin(phase);
+        const gradient = ctx2d.createRadialGradient(cx, cy, 0, cx, cy, radius);
+        gradient.addColorStop(0, `rgba(124, 248, 255, ${innerAlpha})`);
+        gradient.addColorStop(0.6, "rgba(124, 248, 255, 0.08)");
+        gradient.addColorStop(1, "rgba(124, 248, 255, 0)");
+
+        ctx2d.save();
+        ctx2d.fillStyle = gradient;
+        ctx2d.beginPath();
+        ctx2d.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx2d.fill();
+        ctx2d.restore();
       }
 
       const tipLen = 4.5;
@@ -363,7 +360,13 @@ export function SimCanvas({
   }, [agentsRef]);
 
   return (
-    <div ref={wrapRef} className="sim-canvas-root inline-block rounded-sm">
+    <div
+      ref={wrapRef}
+      className="sim-canvas-root inline-block rounded-sm"
+      onPointerDown={(e) => {
+        if (e.button === 0) onCanvasPointerDown?.();
+      }}
+    >
       <canvas
         ref={canvasRef}
         width={LOGICAL_WIDTH}
