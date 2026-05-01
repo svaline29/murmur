@@ -75,8 +75,7 @@ export const DEFAULT_RULES: RuleWeights = {
 const FRAME_DT = 1;
 
 /**
- * One physics step: boids (inverse-square separation within perception with mid-range falloff,
- * alignment + cohesion within perception),
+ * One physics step: boids (separation within perception/3, alignment + cohesion within perception),
  * soft boundary, speed cap. Mutates `agents` in place; reuses internal buffers (no per-tick allocation).
  */
 export function tick(
@@ -92,9 +91,8 @@ export function tick(
 
   const perception = rules.perception;
   const r2 = perception * perception;
-  const halfPerception = perception * 0.5;
-  const perceptionFalloffDenom = Math.max(perception - halfPerception, 1e-6);
-  const sepSpeedMul = Math.min(rules.speed / 2, 2);
+  const rSep = perception / 3;
+  const rSep2 = rSep * rSep;
   const margin = BOUNDARY_MARGIN;
 
   sepX.fill(0, 0, n);
@@ -124,17 +122,13 @@ export function tick(
       count++;
       const d = Math.sqrt(d2);
 
-      const sepWeight =
-        d <= halfPerception
-          ? 1
-          : Math.max(0, 1 - (d - halfPerception) / perceptionFalloffDenom);
-      const invSq = 1 / (d * d);
-      let sepMag = sepWeight * invSq * rules.separation;
-      sepMag = Math.min(sepMag, rules.separation * 3);
-      const ux = (ai.x - aj.x) / d;
-      const uy = (ai.y - aj.y) / d;
-      sx += ux * sepMag;
-      sy += uy * sepMag;
+      if (d2 < rSep2) {
+        const invD = 1 / d;
+        const ox = (ai.x - aj.x) * invD;
+        const oy = (ai.y - aj.y) * invD;
+        sx += ox / d;
+        sy += oy / d;
+      }
 
       ax += aj.vx;
       ay += aj.vy;
@@ -159,8 +153,13 @@ export function tick(
     let fy = 0;
 
     if (neigh[i] > 0) {
-      const sx = sepX[i];
-      const sy = sepY[i];
+      let sx = sepX[i];
+      let sy = sepY[i];
+      const sm = len(sx, sy);
+      if (sm > 0) {
+        sx /= sm;
+        sy /= sm;
+      }
       let ax = aliX[i];
       let ay = aliY[i];
       const am = len(ax, ay);
@@ -176,8 +175,8 @@ export function tick(
         cy /= cm;
       }
 
-      fx += sx * sepSpeedMul;
-      fy += sy * sepSpeedMul;
+      fx += sx * rules.separation;
+      fy += sy * rules.separation;
       fx += ax * rules.alignment;
       fy += ay * rules.alignment;
       fx += cx * rules.cohesion;
