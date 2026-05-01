@@ -11,11 +11,11 @@ export interface Agent {
 }
 
 export interface RuleWeights {
-  separation: number; // 0..2,  default 1.5
-  alignment: number; // 0..2,  default 1.0
-  cohesion: number; // 0..2,  default 1.0
-  speed: number; // 0.5..4, default 2.0  (max velocity)
-  perception: number; // 20..100, default 50  (neighbor radius in px)
+  separation: number; // 0..5,  default 1.5
+  alignment: number; // 0..5,  default 1.0
+  cohesion: number; // 0..5,  default 1.0
+  speed: number; // 0.2..8, default 2.0  (max velocity)
+  perception: number; // 10..250, default 50  (neighbor radius in px)
 }
 
 export interface Cluster {
