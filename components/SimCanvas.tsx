@@ -20,6 +20,7 @@ const HIGHLIGHT_DURATION_MS = 8000;
 
 /** Grid line spacing — spec §4.6 */
 const GRID_STEP = 50;
+const AGENT_GLOW_SIZE = 16;
 
 interface CanvasPalette {
   bgCanvas: string;
@@ -142,7 +143,7 @@ function createVignetteCache(): HTMLCanvasElement {
 }
 
 function createAgentGlowCache(palette: CanvasPalette): HTMLCanvasElement {
-  const size = 18;
+  const size = AGENT_GLOW_SIZE;
   const center = size / 2;
   const g = document.createElement("canvas");
   g.width = size;
@@ -151,9 +152,9 @@ function createAgentGlowCache(palette: CanvasPalette): HTMLCanvasElement {
   if (!gctx) return g;
 
   const glowRgb = parseCssRgba(palette.agentGlow);
-  const glow = gctx.createRadialGradient(center, center, 0, center, center, 7);
-  glow.addColorStop(0, `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${glowRgb.baseA * 0.55})`);
-  glow.addColorStop(0.45, `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${glowRgb.baseA * 0.22})`);
+  const glow = gctx.createRadialGradient(center, center, 0, center, center, 6);
+  glow.addColorStop(0, `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${glowRgb.baseA * 0.46})`);
+  glow.addColorStop(0.45, `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${glowRgb.baseA * 0.16})`);
   glow.addColorStop(1, `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},0)`);
   gctx.fillStyle = glow;
   gctx.fillRect(0, 0, size, size);
@@ -223,7 +224,7 @@ export function SimCanvas({
       canvasEl.style.width = `${cssWidth}px`;
       canvasEl.style.height = `${cssHeight}px`;
       ctx2d.setTransform(1, 0, 0, 1, 0, 0);
-      ctx2d.scale(dpr, dpr);
+      ctx2d.scale((cssWidth / LOGICAL_WIDTH) * dpr, (cssHeight / LOGICAL_HEIGHT) * dpr);
       ctx2d.imageSmoothingEnabled = true;
       ctx2d.lineCap = "round";
       ctx2d.lineJoin = "round";
@@ -249,7 +250,7 @@ export function SimCanvas({
       const palette = paletteRef.current ?? readPalette(wrapEl);
       const agents = agentsRef.current;
 
-      ctx2d.fillStyle = "rgba(5, 5, 5, 0.15)";
+      ctx2d.fillStyle = "rgba(5, 5, 5, 0.22)";
       ctx2d.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
       if (gridCache) {
@@ -323,7 +324,11 @@ export function SimCanvas({
 
         ctx2d.save();
         if (agentGlowCache) {
-          ctx2d.drawImage(agentGlowCache, a.x - 9, a.y - 9);
+          ctx2d.drawImage(
+            agentGlowCache,
+            a.x - AGENT_GLOW_SIZE / 2,
+            a.y - AGENT_GLOW_SIZE / 2,
+          );
         }
 
         ctx2d.translate(a.x, a.y);
