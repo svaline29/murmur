@@ -4,7 +4,16 @@
  */
 
 import { detectClusters } from "./extractor";
-import type { Agent } from "./types";
+import type { Agent, RuleWeights } from "./types";
+
+/** perception such that Math.max(perception * 0.9, 30) === 60 (legacy test radius). */
+const RULES_CLUSTER_RADIUS_60: RuleWeights = {
+  separation: 1,
+  alignment: 1,
+  cohesion: 1,
+  speed: 2,
+  perception: 60 / 0.9,
+};
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -43,7 +52,7 @@ function run(): void {
   agents.push(makeAgent(nextId++, 520, 800, 1));
   agents.push(makeAgent(nextId++, -400, 100, -0.5));
 
-  const clusters = detectClusters(agents, 60);
+  const clusters = detectClusters(agents, RULES_CLUSTER_RADIUS_60);
 
   assert(clusters.length === 2, `expected 2 clusters, got ${clusters.length}`);
   assert(

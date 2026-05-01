@@ -1,7 +1,5 @@
 import type { Agent, Cluster, RuleWeights, SimSnapshot } from "./types";
 
-/** Cluster detection radius default per spec §4.2 (distinct from boids `perception`). */
-const DEFAULT_CLUSTER_RADIUS_PX = 60;
 const MIN_CLUSTER_SIZE = 5;
 
 function distSq(ax: number, ay: number, bx: number, by: number): number {
@@ -98,10 +96,12 @@ function buildClusterFromIndices(
 
 /**
  * Distance-threshold grouping (Union-Find). Agents need ≥2 neighbors within
- * `radius`. Components with size ≥ 5 become clusters; ids 0..N−1 by descending size.
+ * a detection radius scaled from `rules.perception`. Components with size ≥ 5
+ * become clusters; ids 0..N−1 by descending size.
  */
-export function detectClusters(agents: Agent[], radius: number): Cluster[] {
-  const r = radius;
+export function detectClusters(agents: Agent[], rules: RuleWeights): Cluster[] {
+  const detectionRadius = Math.max(rules.perception * 0.9, 30);
+  const r = detectionRadius;
   const n = agents.length;
   const r2 = r * r;
 
@@ -175,7 +175,7 @@ export function extractSnapshot(
   previousSnapshot: SimSnapshot | null,
 ): SimSnapshot {
   const timestamp = Date.now();
-  const clusters = detectClusters(agents, DEFAULT_CLUSTER_RADIUS_PX);
+  const clusters = detectClusters(agents, rules);
   const clusterCount = clusters.length;
   const agentCount = agents.length;
 

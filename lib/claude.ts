@@ -52,15 +52,10 @@ by **moderate steps** (roughly 0.5–1.5 on separation/alignment/cohesion,
 smaller on speed). Visible change is good; slamming multiple knobs to 0 or 5
 is wrong — that breaks the sim.
 
-**More chaotic / dispersed:** raise separation a bit; lower alignment and
-cohesion **slightly**. Never drive alignment or cohesion to zero — keep them
-at least ~0.8 so neighbors still interact and velocities stay lively. Avoid
-max perception (large radii + extreme weights makes everyone pull the same way).
+For chaotic behavior, ALWAYS include high speed (5-8) alongside high separation and low cohesion. Without high speed, agents just re-equilibrate at wider spacing — which looks the same, just zoomed out. High speed + high separation = true scatter. Low speed + high separation = looser but still stable flock.
 
-**Tighter flock / more cohesive:** raise cohesion and alignment moderately.
-Keep separation at least ~1.0–1.5 so agents maintain spacing and keep moving as
-a group instead of collapsing into one static clump. Do not combine near-max
-cohesion with near-min separation.
+For tight flocking: high cohesion (3-5), high alignment (2-4), low separation (0.2-0.8), moderate speed (1.5-3), high perception (80-200).
+For total chaos: separation (3-5), alignment (0-0.5), cohesion (0-0.3), speed (5-8), perception (10-30).
 
 
 Only set rule_update when the user is requesting a behavioral change.
