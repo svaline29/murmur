@@ -46,6 +46,7 @@ When the user asks for chaos, push values toward extremes. When they
 ask for tight flocking, push toward the other extreme. Subtle nudges
 are wrong — the user wants visible change.
 
+
 Only set rule_update when the user is requesting a behavioral change.
 Only set highlight_cluster when referencing a specific cluster.
 Otherwise leave them null.
@@ -199,11 +200,11 @@ function inRange(key: RuleKey, n: number): boolean {
     case "separation":
     case "alignment":
     case "cohesion":
-      return n >= 0 && n <= 2;
+      return n >= 0 && n <= 5;
     case "speed":
-      return n >= 0.5 && n <= 4;
+      return n >= 0.2 && n <= 8;
     case "perception":
-      return n >= 20 && n <= 100;
+      return n >= 10 && n <= 250;
     default:
       return false;
   }
