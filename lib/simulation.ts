@@ -70,6 +70,7 @@ export const DEFAULT_RULES: RuleWeights = {
   cohesion: 1.0,
   speed: 2.0,
   perception: 50,
+  entropy: 0.5,
 };
 
 const FRAME_DT = 1;
@@ -176,6 +177,12 @@ export function tick(
     if (a.y < margin) fy += (margin - a.y) * BOUNDARY_STRENGTH;
     else if (a.y > height - margin) fy -= (a.y - (height - margin)) * BOUNDARY_STRENGTH;
 
+    if (rules.entropy > 0) {
+      const angle = Math.random() * Math.PI * 2;
+      fx += Math.cos(angle) * rules.entropy * 0.3;
+      fy += Math.sin(angle) * rules.entropy * 0.3;
+    }
+
     const forceMax = rules.speed * 0.8 + 1.0;
     const [cfx, cfy] = clampMag(fx, fy, forceMax);
     fx = cfx;
@@ -191,6 +198,14 @@ export function tick(
     const capped = clampMag(a.vx, a.vy, rules.speed);
     a.vx = capped[0];
     a.vy = capped[1];
+
+    const minSpeed = rules.speed * 0.15;
+    const currentSpeed = len(a.vx, a.vy);
+    if (currentSpeed > 0 && currentSpeed < minSpeed) {
+      const boost = minSpeed / currentSpeed;
+      a.vx *= boost;
+      a.vy *= boost;
+    }
 
     a.x += a.vx * FRAME_DT;
     a.y += a.vy * FRAME_DT;

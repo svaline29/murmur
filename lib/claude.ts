@@ -33,7 +33,7 @@ You MUST always return valid JSON in this exact shape:
   "message": "<your conversational response, always present>",
   "rule_update": null OR { "separation": <num>, "alignment": <num>,
                            "cohesion": <num>, "speed": <num>,
-                           "perception": <num> } (any subset),
+                           "perception": <num>, "entropy": <num> } (any subset),
   "highlight_cluster": null OR <integer cluster id from the snapshot>
 }
 
@@ -43,6 +43,7 @@ Rule weight ranges (stay inside these bounds):
 - cohesion: 0 to 5
 - speed: 0.2 to 8
 - perception: 10 to 250
+- entropy: 0 to 5 (random force per tick — 0 is pure deterministic boids, higher values add noise that prevents dead equilibrium and creates more interesting emergent patterns; default 0.5)
 
 Behavior tweaks must stay **playable**: motion should keep flowing; agents
 should not freeze into a motionless blob or a single overlapping point.
@@ -62,6 +63,8 @@ Keep separation at least ~1.0–1.5 so agents maintain spacing and keep moving a
 a group instead of collapsing into one static clump. Do not combine near-max
 cohesion with near-min separation.
 
+High entropy (3-5) combined with low cohesion produces genuinely random wandering. Low entropy (0-0.2) with high cohesion produces very clean, predictable flocking. Entropy is useful for breaking agents out of stable equilibrium.
+
 
 Only set rule_update when the user is requesting a behavioral change.
 Only set highlight_cluster when referencing a specific cluster.
@@ -75,6 +78,7 @@ const RULE_KEYS = [
   "cohesion",
   "speed",
   "perception",
+  "entropy",
 ] as const satisfies readonly (keyof RuleWeights)[];
 
 type RuleKey = (typeof RULE_KEYS)[number];
@@ -126,7 +130,7 @@ export function serializeSnapshotContext(snapshot: SimSnapshot): string {
   const timeSeconds = snapshot.delta.timeSinceLastChange / 1000;
   const timeLine = `- Time since cluster count last changed: ${round1(timeSeconds)} seconds`;
   const r = snapshot.currentRules;
-  const rulesLine = `- Current rules: separation ${r.separation}, alignment ${r.alignment}, cohesion ${r.cohesion}, speed ${r.speed},\n  perception ${r.perception}`;
+  const rulesLine = `- Current rules: separation ${r.separation}, alignment ${r.alignment}, cohesion ${r.cohesion}, speed ${r.speed},\n  perception ${r.perception}, entropy ${r.entropy}`;
 
   const clusterBlocks = clustersById
     .map(
@@ -221,6 +225,8 @@ function inRange(key: RuleKey, n: number): boolean {
       return n >= 0.2 && n <= 8;
     case "perception":
       return n >= 10 && n <= 250;
+    case "entropy":
+      return n >= 0 && n <= 5;
     default:
       return false;
   }

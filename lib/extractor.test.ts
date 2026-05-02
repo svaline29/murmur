@@ -13,6 +13,7 @@ const RULES_CLUSTER_RADIUS_60: RuleWeights = {
   cohesion: 1,
   speed: 2,
   perception: 60 / 0.9,
+  entropy: 0.5,
 };
 
 function assert(cond: boolean, msg: string): void {

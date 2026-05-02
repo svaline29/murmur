@@ -16,6 +16,7 @@ export interface RuleWeights {
   cohesion: number; // 0..5,  default 1.0
   speed: number; // 0.2..8, default 2.0  (max velocity)
   perception: number; // 10..250, default 50  (neighbor radius in px)
+  entropy: number; // 0..5, default 0.5 (random force magnitude per tick)
 }
 
 export interface Cluster {
