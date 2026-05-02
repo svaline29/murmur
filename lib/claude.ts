@@ -323,22 +323,43 @@ function inRange(key: RuleKey, n: number): boolean {
   }
 }
 
-function validateRuleUpdate(
-  value: unknown
-): Partial<RuleWeights> | null | false {
+/** Coerce model output into rule_update; drop invalid keys instead of failing the whole response. */
+function parseRuleUpdate(value: unknown): Partial<RuleWeights> | null {
   if (value === null || value === undefined) return null;
-  if (!isPlainObject(value)) return false;
+  if (!isPlainObject(value)) return null;
   const out: Partial<RuleWeights> = {};
   for (const key of Object.keys(value)) {
     if (!RULE_KEYS.includes(key as RuleKey)) continue;
     const k = key as RuleKey;
-    const n = value[k];
-    if (typeof n !== "number" || Number.isNaN(n) || !inRange(k, n)) {
-      return false;
+    const raw = value[k];
+    let n: number | undefined;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      n = raw;
+    } else if (typeof raw === "string") {
+      const parsed = Number(raw.trim());
+      if (Number.isFinite(parsed)) n = parsed;
     }
+    if (n === undefined || !inRange(k, n)) continue;
     out[k] = n;
   }
   return Object.keys(out).length === 0 ? null : out;
+}
+
+/** Accept numeric cluster id from JSON number or string; invalid values become null (do not reject message). */
+function normalizeHighlightCluster(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || Math.floor(value) !== value) return null;
+    return value;
+  }
+  if (typeof value === "string") {
+    const t = value.trim();
+    if (!/^-?\d+$/.test(t)) return null;
+    const n = Number(t);
+    if (!Number.isFinite(n) || Math.floor(n) !== n) return null;
+    return n;
+  }
+  return null;
 }
 
 export function parseResponse(rawText: string): ClaudeResponse | null {
@@ -357,31 +378,15 @@ export function parseResponse(rawText: string): ClaudeResponse | null {
 
   const message = parsed.message;
   const ruleRaw = parsed.rule_update;
-  const highlightRaw = parsed.highlight_cluster;
 
   if (typeof message !== "string") return null;
 
-  const ruleUpdate = validateRuleUpdate(ruleRaw);
-  if (ruleUpdate === false) return null;
-
-  if (
-    highlightRaw !== null &&
-    highlightRaw !== undefined &&
-    typeof highlightRaw !== "number"
-  ) {
-    return null;
-  }
-  if (
-    typeof highlightRaw === "number" &&
-    (!Number.isFinite(highlightRaw) ||
-      Math.floor(highlightRaw) !== highlightRaw)
-  ) {
-    return null;
-  }
+  const ruleUpdate = parseRuleUpdate(ruleRaw);
+  const highlightCluster = normalizeHighlightCluster(parsed.highlight_cluster);
 
   return {
     message,
     rule_update: ruleUpdate,
-    highlight_cluster: highlightRaw === undefined ? null : highlightRaw,
+    highlight_cluster: highlightCluster,
   };
 }
