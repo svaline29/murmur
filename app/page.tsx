@@ -375,6 +375,18 @@ export default function Home(): ReactElement {
                     className="w-full accent-[var(--accent)]"
                   />
                 </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[var(--text-secondary)]">entropy</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={5}
+                    step={0.05}
+                    value={devRules.entropy}
+                    onChange={(e) => patchDevRule("entropy", Number(e.target.value))}
+                    className="w-full accent-[var(--accent)]"
+                  />
+                </label>
               </div>
             </div>
           ) : null}
