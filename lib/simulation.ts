@@ -189,8 +189,17 @@ export function tick(
     if (a.y < margin) fy += (margin - a.y) * BOUNDARY_STRENGTH;
     else if (a.y > height - margin) fy -= (a.y - (height - margin)) * BOUNDARY_STRENGTH;
 
+    const forceMax = rules.speed * 0.4 + 0.5;
+    const [cfx, cfy] = clampMag(fx, fy, forceMax);
+    fx = cfx;
+    fy = cfy;
+
     a.vx += fx * FRAME_DT;
     a.vy += fy * FRAME_DT;
+
+    const drag = neigh[i] > 0 ? 0.97 : 0.94;
+    a.vx *= drag;
+    a.vy *= drag;
 
     const capped = clampMag(a.vx, a.vy, rules.speed);
     a.vx = capped[0];
