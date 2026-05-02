@@ -326,11 +326,11 @@ function inRange(key: RuleKey, n: number): boolean {
 function validateRuleUpdate(
   value: unknown
 ): Partial<RuleWeights> | null | false {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (!isPlainObject(value)) return false;
   const out: Partial<RuleWeights> = {};
   for (const key of Object.keys(value)) {
-    if (!RULE_KEYS.includes(key as RuleKey)) return false;
+    if (!RULE_KEYS.includes(key as RuleKey)) continue;
     const k = key as RuleKey;
     const n = value[k];
     if (typeof n !== "number" || Number.isNaN(n) || !inRange(k, n)) {
