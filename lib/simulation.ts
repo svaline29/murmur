@@ -161,13 +161,13 @@ export function tick(
 
       // Alignment: clamp to max speed range, then weight
       const [cax, cay] = clampMag(aliX[i], aliY[i], rules.speed * 2);
-      fx += cax * rules.alignment * 0.1;
-      fy += cay * rules.alignment * 0.1;
+      fx += cax * rules.alignment * 0.4;
+      fy += cay * rules.alignment * 0.4;
 
       // Cohesion: scale by actual distance to center of mass
       // (already a position delta — don't normalize, just scale down)
-      fx += cohX[i] * rules.cohesion * 0.01;
-      fy += cohY[i] * rules.cohesion * 0.01;
+      fx += cohX[i] * rules.cohesion * 0.04;
+      fy += cohY[i] * rules.cohesion * 0.04;
     }
 
     if (a.x < margin) fx += (margin - a.x) * BOUNDARY_STRENGTH;
@@ -176,7 +176,7 @@ export function tick(
     if (a.y < margin) fy += (margin - a.y) * BOUNDARY_STRENGTH;
     else if (a.y > height - margin) fy -= (a.y - (height - margin)) * BOUNDARY_STRENGTH;
 
-    const forceMax = rules.speed * 0.4 + 0.5;
+    const forceMax = rules.speed * 0.8 + 1.0;
     const [cfx, cfy] = clampMag(fx, fy, forceMax);
     fx = cfx;
     fy = cfy;
@@ -184,7 +184,7 @@ export function tick(
     a.vx += fx * FRAME_DT;
     a.vy += fy * FRAME_DT;
 
-    const drag = neigh[i] > 0 ? 0.985 : 0.96;
+    const drag = neigh[i] > 0 ? 0.992 : 0.975;
     a.vx *= drag;
     a.vy *= drag;
 
