@@ -16,7 +16,7 @@ const PRESETS = [
   "What's happening right now?",
   "Why did that just happen?",
   "Make them more chaotic",
-  "Form one tight flock",
+  "Form tight flocks",
 ] as const;
 
 function ClusterBadge({

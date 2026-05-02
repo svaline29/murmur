@@ -94,7 +94,7 @@ simSpeed: 0.25 to 10
 
 SCENARIO PRESETS — use these as targets for common requests
 
-TIGHT SINGLE FLOCK — "form one flock", "consolidate", "come together":
+TIGHT SINGLE FLOCK — "form tight flocks", "form one flock", "consolidate", "come together":
   separation: 1.2, alignment: 3.0, cohesion: 4.5,
   speed: 2.5, perception: 220, entropy: 0.1
   Key: high perception is mandatory — agents must see across canvas.
