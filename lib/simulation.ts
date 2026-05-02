@@ -4,7 +4,7 @@ import type { Agent, RuleWeights } from "./types";
 const BOUNDARY_MARGIN = 50;
 
 /** Steer inward near edges; tuned with boundary margin so forces stay moderate at default speed. */
-const BOUNDARY_STRENGTH = 0.08;
+const BOUNDARY_STRENGTH = 0.04;
 
 let bufN = 0;
 let sepX: Float64Array = new Float64Array(0);
@@ -75,7 +75,7 @@ export const DEFAULT_RULES: RuleWeights = {
 const FRAME_DT = 1;
 
 /**
- * One physics step: boids (separation within perception/3, alignment + cohesion within perception),
+ * One physics step: boids (separation within ~0.45× perception, alignment + cohesion within perception),
  * soft boundary, speed cap. Mutates `agents` in place; reuses internal buffers (no per-tick allocation).
  */
 export function tick(
@@ -91,7 +91,7 @@ export function tick(
 
   const perception = rules.perception;
   const r2 = perception * perception;
-  const rSep = perception / 3;
+  const rSep = perception * 0.45;
   const rSep2 = rSep * rSep;
   const margin = BOUNDARY_MARGIN;
 
@@ -153,34 +153,21 @@ export function tick(
     let fy = 0;
 
     if (neigh[i] > 0) {
-      let sx = sepX[i];
-      let sy = sepY[i];
-      const sm = len(sx, sy);
-      if (sm > 0) {
-        sx /= sm;
-        sy /= sm;
-      }
-      let ax = aliX[i];
-      let ay = aliY[i];
-      const am = len(ax, ay);
-      if (am > 0) {
-        ax /= am;
-        ay /= am;
-      }
-      let cx = cohX[i];
-      let cy = cohY[i];
-      const cm = len(cx, cy);
-      if (cm > 0) {
-        cx /= cm;
-        cy /= cm;
-      }
+      // Separation: clamp raw magnitude to prevent explosion, then weight
+      const MAX_SEP = rules.perception * 0.5;
+      const [csx, csy] = clampMag(sepX[i], sepY[i], MAX_SEP);
+      fx += csx * rules.separation;
+      fy += csy * rules.separation;
 
-      fx += sx * rules.separation;
-      fy += sy * rules.separation;
-      fx += ax * rules.alignment;
-      fy += ay * rules.alignment;
-      fx += cx * rules.cohesion;
-      fy += cy * rules.cohesion;
+      // Alignment: clamp to max speed range, then weight
+      const [cax, cay] = clampMag(aliX[i], aliY[i], rules.speed * 2);
+      fx += cax * rules.alignment * 0.1;
+      fy += cay * rules.alignment * 0.1;
+
+      // Cohesion: scale by actual distance to center of mass
+      // (already a position delta — don't normalize, just scale down)
+      fx += cohX[i] * rules.cohesion * 0.01;
+      fy += cohY[i] * rules.cohesion * 0.01;
     }
 
     if (a.x < margin) fx += (margin - a.x) * BOUNDARY_STRENGTH;
@@ -197,7 +184,7 @@ export function tick(
     a.vx += fx * FRAME_DT;
     a.vy += fy * FRAME_DT;
 
-    const drag = neigh[i] > 0 ? 0.97 : 0.94;
+    const drag = neigh[i] > 0 ? 0.985 : 0.96;
     a.vx *= drag;
     a.vy *= drag;
 
