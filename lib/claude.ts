@@ -95,9 +95,10 @@ simSpeed: 0.25 to 10
 SCENARIO PRESETS — use these as targets for common requests
 
 TIGHT SINGLE FLOCK — "form one flock", "consolidate", "come together":
-  separation: 0.3, alignment: 3.0, cohesion: 4.5,
+  separation: 1.2, alignment: 3.0, cohesion: 4.5,
   speed: 2.5, perception: 220, entropy: 0.1
   Key: high perception is mandatory — agents must see across canvas.
+  Keep separation around ~1.0–1.5 so the flock stays one mass without collapsing to a single overlapping blob.
 
 CHAOS / SCATTER — "chaos", "scatter", "break apart", "go wild":
   separation: 4.0, alignment: 0.2, cohesion: 0.1,
